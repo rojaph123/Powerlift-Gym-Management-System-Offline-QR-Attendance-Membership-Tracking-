@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet, Image, TextInput, Pressable, Platform } from "react-native";
+import { View, StyleSheet, Image, Pressable, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as SecureStore from "expo-secure-store";
 import * as Haptics from "expo-haptics";
+import { Feather } from "@expo/vector-icons";
 
 import { useTheme } from "@/hooks/useTheme";
 import { useApp } from "@/context/AppContext";
@@ -14,18 +15,32 @@ const PIN_KEY = "powerlift_gym_pin";
 
 export default function PinScreen() {
   const { theme } = useTheme();
-  const { setAuthenticated, setHasPin, hasPin } = useApp();
+  const { setAuthenticated, setHasPin } = useApp();
   const insets = useSafeAreaInsets();
 
   const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
   const [error, setError] = useState("");
   const [storedPin, setStoredPin] = useState<string | null>(null);
 
   useEffect(() => {
     checkExistingPin();
   }, []);
+
+  useEffect(() => {
+    if (isCreating && !isConfirming && pin.length === 4) {
+      setTimeout(() => {
+        setIsConfirming(true);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }, 200);
+    } else if (isCreating && isConfirming && confirmPin.length === 4) {
+      setTimeout(() => handleSubmit(), 200);
+    } else if (!isCreating && pin.length === 4) {
+      setTimeout(() => handleSubmit(), 200);
+    }
+  }, [pin, confirmPin]);
 
   const checkExistingPin = async () => {
     try {
@@ -51,16 +66,39 @@ export default function PinScreen() {
     }
   };
 
-  const handlePinChange = (value: string) => {
-    const numericValue = value.replace(/[^0-9]/g, "").slice(0, 4);
-    setPin(numericValue);
+  const handleNumberPress = (num: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setError("");
+    
+    if (isCreating && isConfirming) {
+      if (confirmPin.length < 4) {
+        setConfirmPin(prev => prev + num);
+      }
+    } else {
+      if (pin.length < 4) {
+        setPin(prev => prev + num);
+      }
+    }
   };
 
-  const handleConfirmPinChange = (value: string) => {
-    const numericValue = value.replace(/[^0-9]/g, "").slice(0, 4);
-    setConfirmPin(numericValue);
-    setError("");
+  const handleBackspace = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
+    if (isCreating && isConfirming) {
+      setConfirmPin(prev => prev.slice(0, -1));
+    } else {
+      setPin(prev => prev.slice(0, -1));
+    }
+  };
+
+  const handleClear = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
+    if (isCreating && isConfirming) {
+      setConfirmPin("");
+    } else {
+      setPin("");
+    }
   };
 
   const handleSubmit = async () => {
@@ -70,8 +108,13 @@ export default function PinScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         return;
       }
+      if (!isConfirming) {
+        setIsConfirming(true);
+        return;
+      }
       if (pin !== confirmPin) {
         setError("PINs do not match");
+        setConfirmPin("");
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         return;
       }
@@ -118,14 +161,44 @@ export default function PinScreen() {
     );
   };
 
+  const renderNumberButton = (num: string) => (
+    <Pressable
+      key={num}
+      onPress={() => handleNumberPress(num)}
+      style={({ pressed }) => [
+        styles.numButton,
+        { backgroundColor: pressed ? theme.primary : theme.backgroundSecondary },
+      ]}
+    >
+      <ThemedText style={styles.numButtonText}>{num}</ThemedText>
+    </Pressable>
+  );
+
+  const getCurrentPin = () => {
+    if (isCreating && isConfirming) {
+      return confirmPin;
+    }
+    return pin;
+  };
+
+  const getSubtitle = () => {
+    if (isCreating) {
+      if (isConfirming) {
+        return "Confirm your 4-digit PIN";
+      }
+      return "Create your 4-digit PIN";
+    }
+    return "Enter your PIN to continue";
+  };
+
   return (
     <ThemedView
       style={[
         styles.container,
-        { paddingTop: insets.top + Spacing["3xl"], paddingBottom: insets.bottom + Spacing.xl },
+        { paddingTop: insets.top + Spacing.xl, paddingBottom: insets.bottom + Spacing.md },
       ]}
     >
-      <View style={styles.content}>
+      <View style={styles.header}>
         <Image
           source={require("../../assets/images/gym-logo.jpg")}
           style={styles.logo}
@@ -133,55 +206,62 @@ export default function PinScreen() {
         />
 
         <ThemedText type="h3" style={styles.title}>
-          Welcome to Powerlift Fitness Gym
+          Powerlift Fitness Gym
         </ThemedText>
 
         <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>
-          {isCreating ? "Create your 4-digit PIN" : "Enter your PIN to continue"}
+          {getSubtitle()}
         </ThemedText>
 
-        <View style={styles.inputContainer}>
-          {renderPinDots(pin)}
-          <TextInput
-            style={[styles.hiddenInput]}
-            value={pin}
-            onChangeText={handlePinChange}
-            keyboardType="number-pad"
-            maxLength={4}
-            secureTextEntry
-            autoFocus
-          />
-        </View>
-
-        {isCreating ? (
-          <View style={styles.inputContainer}>
-            <ThemedText style={[styles.confirmLabel, { color: theme.textSecondary }]}>
-              Confirm PIN
-            </ThemedText>
-            {renderPinDots(confirmPin)}
-            <TextInput
-              style={[styles.hiddenInput]}
-              value={confirmPin}
-              onChangeText={handleConfirmPinChange}
-              keyboardType="number-pad"
-              maxLength={4}
-              secureTextEntry
-            />
-          </View>
-        ) : null}
+        {renderPinDots(getCurrentPin())}
 
         {error ? (
           <ThemedText style={[styles.error, { color: theme.error }]}>{error}</ThemedText>
-        ) : null}
+        ) : (
+          <View style={styles.errorPlaceholder} />
+        )}
+      </View>
 
-        <Pressable
-          onPress={handleSubmit}
-          style={[styles.button, { backgroundColor: theme.primary }]}
-        >
-          <ThemedText style={[styles.buttonText, { color: "#FFFFFF" }]}>
-            {isCreating ? "Create PIN" : "Unlock"}
-          </ThemedText>
-        </Pressable>
+      <View style={styles.keypadContainer}>
+        <View style={styles.keypadRow}>
+          {renderNumberButton("1")}
+          {renderNumberButton("2")}
+          {renderNumberButton("3")}
+        </View>
+        <View style={styles.keypadRow}>
+          {renderNumberButton("4")}
+          {renderNumberButton("5")}
+          {renderNumberButton("6")}
+        </View>
+        <View style={styles.keypadRow}>
+          {renderNumberButton("7")}
+          {renderNumberButton("8")}
+          {renderNumberButton("9")}
+        </View>
+        <View style={styles.keypadRow}>
+          <Pressable
+            onPress={handleClear}
+            onLongPress={handleClear}
+            style={({ pressed }) => [
+              styles.numButton,
+              styles.actionButton,
+              { backgroundColor: pressed ? theme.error : "transparent" },
+            ]}
+          >
+            <ThemedText style={[styles.actionButtonText, { color: theme.error }]}>C</ThemedText>
+          </Pressable>
+          {renderNumberButton("0")}
+          <Pressable
+            onPress={handleBackspace}
+            style={({ pressed }) => [
+              styles.numButton,
+              styles.actionButton,
+              { backgroundColor: pressed ? theme.textSecondary : "transparent" },
+            ]}
+          >
+            <Feather name="delete" size={24} color={theme.text} />
+          </Pressable>
+        </View>
       </View>
 
       <ThemedText style={[styles.footer, { color: theme.textSecondary }]}>
@@ -194,66 +274,81 @@ export default function PinScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "space-between",
   },
-  content: {
-    flex: 1,
+  header: {
     alignItems: "center",
-    justifyContent: "center",
     paddingHorizontal: Spacing.xl,
   },
   logo: {
-    width: 150,
-    height: 150,
-    marginBottom: Spacing["2xl"],
+    width: 100,
+    height: 100,
+    marginBottom: Spacing.lg,
     borderRadius: BorderRadius.lg,
   },
   title: {
     textAlign: "center",
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm,
+    fontSize: 20,
   },
   subtitle: {
     textAlign: "center",
-    marginBottom: Spacing["3xl"],
-  },
-  inputContainer: {
-    alignItems: "center",
     marginBottom: Spacing.xl,
-  },
-  confirmLabel: {
-    marginBottom: Spacing.md,
+    fontSize: 14,
   },
   pinDots: {
     flexDirection: "row",
     gap: Spacing.lg,
+    marginBottom: Spacing.md,
   },
   pinDot: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     borderWidth: 2,
   },
-  hiddenInput: {
-    position: "absolute",
-    opacity: 0,
-    width: 200,
-    height: 50,
-  },
   error: {
-    marginBottom: Spacing.lg,
+    marginTop: Spacing.sm,
+    fontSize: 14,
+    height: 20,
   },
-  button: {
-    paddingVertical: Spacing.lg,
-    paddingHorizontal: Spacing["4xl"],
-    borderRadius: BorderRadius.full,
-    marginTop: Spacing.lg,
+  errorPlaceholder: {
+    height: 20,
+    marginTop: Spacing.sm,
   },
-  buttonText: {
+  keypadContainer: {
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: Spacing["2xl"],
+    maxWidth: 320,
+    alignSelf: "center",
+    width: "100%",
+  },
+  keypadRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: Spacing.md,
+  },
+  numButton: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  numButtonText: {
+    fontSize: 28,
     fontWeight: "600",
-    fontSize: 16,
+  },
+  actionButton: {
+    borderWidth: 0,
+  },
+  actionButtonText: {
+    fontSize: 20,
+    fontWeight: "700",
   },
   footer: {
     textAlign: "center",
     fontSize: 12,
+    paddingBottom: Spacing.sm,
   },
 });
