@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, TextInput, Pressable, Alert } from "react-native";
+import { View, StyleSheet, TextInput, Pressable, Alert, Switch } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -12,9 +12,9 @@ import { Card } from "@/components/Card";
 import { Spacing, BorderRadius } from "@/constants/theme";
 
 export default function SettingsScreen() {
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const { priceSettings, updatePriceSettings } = useApp();
+  const { priceSettings, updatePriceSettings, toggleTheme } = useApp();
 
   const [membership, setMembership] = useState(priceSettings.membership.toString());
   const [studentMonthly, setStudentMonthly] = useState(priceSettings.student_monthly.toString());
@@ -36,6 +36,11 @@ export default function SettingsScreen() {
     Alert.alert("Success", "Price settings saved successfully!");
   };
 
+  const handleThemeToggle = () => {
+    toggleTheme();
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
   const renderPriceField = (
     label: string,
     value: string,
@@ -50,7 +55,7 @@ export default function SettingsScreen() {
         </ThemedText>
       ) : null}
       <View style={[styles.inputContainer, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
-        <ThemedText style={styles.currencySymbol}>₱</ThemedText>
+        <ThemedText style={styles.currencySymbol}>P</ThemedText>
         <TextInput
           style={[styles.input, { color: theme.text }]}
           value={value}
@@ -74,6 +79,27 @@ export default function SettingsScreen() {
       <ThemedText type="h3" style={styles.title}>
         Settings
       </ThemedText>
+
+      <Card style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Feather name={isDark ? "moon" : "sun"} size={20} color={theme.primary} />
+          <ThemedText type="h4">Appearance</ThemedText>
+        </View>
+        <View style={styles.toggleRow}>
+          <View style={styles.toggleInfo}>
+            <ThemedText style={styles.toggleLabel}>Dark Mode</ThemedText>
+            <ThemedText style={[styles.toggleDescription, { color: theme.textSecondary }]}>
+              Switch between light and dark theme
+            </ThemedText>
+          </View>
+          <Switch
+            value={isDark}
+            onValueChange={handleThemeToggle}
+            trackColor={{ false: theme.backgroundTertiary, true: theme.primary + "80" }}
+            thumbColor={isDark ? theme.primary : theme.backgroundSecondary}
+          />
+        </View>
+      </Card>
 
       <Card style={styles.section}>
         <View style={styles.sectionHeader}>
@@ -156,6 +182,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: Spacing.md,
     marginBottom: Spacing.xl,
+  },
+  toggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  toggleInfo: {
+    flex: 1,
+  },
+  toggleLabel: {
+    fontWeight: "500",
+    marginBottom: Spacing.xs,
+  },
+  toggleDescription: {
+    fontSize: 12,
   },
   fieldContainer: {
     marginBottom: Spacing.lg,

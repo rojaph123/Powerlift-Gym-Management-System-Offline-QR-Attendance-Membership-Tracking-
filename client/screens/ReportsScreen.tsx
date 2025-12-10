@@ -2,7 +2,9 @@ import React, { useState, useMemo } from "react";
 import { View, StyleSheet, ScrollView, Pressable, Share, Platform, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
+import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
+import * as FileSystem from "expo-file-system/legacy";
 
 import { useTheme } from "@/hooks/useTheme";
 import { useApp } from "@/context/AppContext";
@@ -22,10 +24,11 @@ const SALE_TYPE_LABELS: Record<string, string> = {
 };
 
 export default function ReportsScreen() {
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { sales, attendance, members } = useApp();
   const [filter, setFilter] = useState<FilterPeriod>("daily");
+  const [isExporting, setIsExporting] = useState(false);
 
   const getDateRange = (period: FilterPeriod): { start: string; end: string } => {
     const today = new Date();
@@ -93,9 +96,219 @@ export default function ReportsScreen() {
   const generateCSV = (): string => {
     let csv = "Date,Type,Amount,Note\n";
     filteredSales.forEach(s => {
-      csv += `${s.date},${SALE_TYPE_LABELS[s.type] || s.type},${s.amount},"${s.note}"\n`;
+      csv += `${s.date},"${SALE_TYPE_LABELS[s.type] || s.type}",${s.amount},"${s.note || ''}"\n`;
     });
     return csv;
+  };
+
+  const generateMembersCSV = (): string => {
+    let csv = "ID,First Name,Last Name,Age,Gender,Email,Phone,Membership Type,Status,Subscription End\n";
+    const today = new Date().toISOString().split("T")[0];
+    members.forEach(m => {
+      const status = m.subscription_end && m.subscription_end >= today ? "Active" : "Expired";
+      csv += `${m.id},"${m.firstname}","${m.lastname}",${m.age},"${m.gender}","${m.email || ''}","${m.phone || ''}","${m.membership_type}","${status}","${m.subscription_end || 'N/A'}"\n`;
+    });
+    return csv;
+  };
+
+  const generateSalesReportHTML = (): string => {
+    const { start, end } = getDateRange(filter);
+    const today = new Date().toLocaleDateString();
+    
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Sales Report - Powerlift Fitness Gym</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
+    .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #DC2626; padding-bottom: 20px; }
+    .header h1 { color: #DC2626; font-size: 24px; margin-bottom: 5px; }
+    .header p { color: #666; font-size: 12px; }
+    .summary { display: flex; justify-content: space-around; margin-bottom: 30px; }
+    .summary-card { text-align: center; padding: 15px 30px; border: 1px solid #ddd; border-radius: 8px; }
+    .summary-card h3 { font-size: 24px; color: #DC2626; }
+    .summary-card p { color: #666; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+    th { background-color: #f5f5f5; font-weight: bold; color: #333; }
+    tr:nth-child(even) { background-color: #fafafa; }
+    .total-row { font-weight: bold; background-color: #f0f0f0 !important; }
+    .footer { margin-top: 30px; text-align: center; color: #999; font-size: 10px; }
+    .section-title { margin: 20px 0 10px; font-size: 16px; color: #333; }
+    .amount { text-align: right; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>POWERLIFT FITNESS GYM</h1>
+    <p>Sales Report - ${filter.charAt(0).toUpperCase() + filter.slice(1)}</p>
+    <p>Period: ${start} to ${end} | Generated: ${today}</p>
+  </div>
+
+  <div class="summary">
+    <div class="summary-card">
+      <h3>P${totalEarnings.toLocaleString()}</h3>
+      <p>Total Earnings</p>
+    </div>
+    <div class="summary-card">
+      <h3>${filteredSales.length}</h3>
+      <p>Transactions</p>
+    </div>
+    <div class="summary-card">
+      <h3>${filteredAttendance.length}</h3>
+      <p>Check-ins</p>
+    </div>
+  </div>
+
+  <h2 class="section-title">Sales by Category</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Category</th>
+        <th class="amount">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${Object.entries(salesByType).map(([type, amount]) => `
+        <tr>
+          <td>${SALE_TYPE_LABELS[type] || type}</td>
+          <td class="amount">P${Number(amount).toLocaleString()}</td>
+        </tr>
+      `).join('')}
+      <tr class="total-row">
+        <td>TOTAL</td>
+        <td class="amount">P${totalEarnings.toLocaleString()}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 class="section-title">Transaction Details</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Type</th>
+        <th class="amount">Amount</th>
+        <th>Note</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${filteredSales.map(s => `
+        <tr>
+          <td>${s.date}</td>
+          <td>${SALE_TYPE_LABELS[s.type] || s.type}</td>
+          <td class="amount">P${s.amount.toLocaleString()}</td>
+          <td>${s.note || '-'}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+
+  <div class="footer">
+    <p>Powerlift Fitness Gym - Developed by Rov - 2025</p>
+  </div>
+</body>
+</html>
+    `;
+  };
+
+  const generateMembersReportHTML = (): string => {
+    const today = new Date().toISOString().split("T")[0];
+    const todayFormatted = new Date().toLocaleDateString();
+    const activeMembers = members.filter(m => m.subscription_end && m.subscription_end >= today);
+    const expiredMembers = members.filter(m => !m.subscription_end || m.subscription_end < today);
+    
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Members List - Powerlift Fitness Gym</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
+    .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #DC2626; padding-bottom: 20px; }
+    .header h1 { color: #DC2626; font-size: 24px; margin-bottom: 5px; }
+    .header p { color: #666; font-size: 12px; }
+    .summary { display: flex; justify-content: space-around; margin-bottom: 30px; }
+    .summary-card { text-align: center; padding: 15px 30px; border: 1px solid #ddd; border-radius: 8px; }
+    .summary-card h3 { font-size: 24px; }
+    .summary-card.active h3 { color: #22C55E; }
+    .summary-card.expired h3 { color: #F59E0B; }
+    .summary-card.total h3 { color: #DC2626; }
+    .summary-card p { color: #666; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 11px; }
+    th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
+    th { background-color: #f5f5f5; font-weight: bold; color: #333; }
+    tr:nth-child(even) { background-color: #fafafa; }
+    .status-active { color: #22C55E; font-weight: bold; }
+    .status-expired { color: #F59E0B; font-weight: bold; }
+    .footer { margin-top: 30px; text-align: center; color: #999; font-size: 10px; }
+    .section-title { margin: 20px 0 10px; font-size: 16px; color: #333; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>POWERLIFT FITNESS GYM</h1>
+    <p>Members List | Generated: ${todayFormatted}</p>
+  </div>
+
+  <div class="summary">
+    <div class="summary-card total">
+      <h3>${members.length}</h3>
+      <p>Total Members</p>
+    </div>
+    <div class="summary-card active">
+      <h3>${activeMembers.length}</h3>
+      <p>Active</p>
+    </div>
+    <div class="summary-card expired">
+      <h3>${expiredMembers.length}</h3>
+      <p>Expired</p>
+    </div>
+  </div>
+
+  <h2 class="section-title">All Members</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Name</th>
+        <th>Age</th>
+        <th>Gender</th>
+        <th>Type</th>
+        <th>Phone</th>
+        <th>Status</th>
+        <th>Expires</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${members.map((m, i) => {
+        const isActive = m.subscription_end && m.subscription_end >= today;
+        return `
+        <tr>
+          <td>${i + 1}</td>
+          <td>${m.firstname} ${m.lastname}</td>
+          <td>${m.age}</td>
+          <td style="text-transform: capitalize;">${m.gender}</td>
+          <td style="text-transform: capitalize;">${m.membership_type}</td>
+          <td>${m.phone || '-'}</td>
+          <td class="${isActive ? 'status-active' : 'status-expired'}">${isActive ? 'Active' : 'Expired'}</td>
+          <td>${m.subscription_end || 'N/A'}</td>
+        </tr>
+      `}).join('')}
+    </tbody>
+  </table>
+
+  <div class="footer">
+    <p>Powerlift Fitness Gym - Developed by Rov - 2025</p>
+  </div>
+</body>
+</html>
+    `;
   };
 
   const handleExportCSV = async () => {
@@ -106,29 +319,72 @@ export default function ReportsScreen() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `gym_report_${filter}.csv`;
+      a.download = `sales_report_${filter}.csv`;
       a.click();
       URL.revokeObjectURL(url);
       return;
     }
 
     try {
-      await Share.share({
-        message: csv,
-        title: `gym_report_${filter}.csv`,
-      });
+      const fileUri = (FileSystem.documentDirectory || '') + `sales_report_${filter}.csv`;
+      await FileSystem.writeAsStringAsync(fileUri, csv);
+      
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri, { mimeType: "text/csv" });
+      } else {
+        await Share.share({ message: csv, title: `sales_report_${filter}.csv` });
+      }
     } catch (error) {
-      Alert.alert("Error", "Failed to export report.");
+      Alert.alert("Error", "Failed to export CSV report.");
     }
   };
 
-  const handleExportMembersList = async () => {
-    let csv = "ID,First Name,Last Name,Age,Gender,Email,Phone,Membership Type,Status,Subscription End\n";
-    members.forEach(m => {
-      const today = new Date().toISOString().split("T")[0];
-      const status = m.subscription_end && m.subscription_end >= today ? "Active" : "Expired";
-      csv += `${m.id},${m.firstname},${m.lastname},${m.age},${m.gender},${m.email},${m.phone},${m.membership_type},${status},${m.subscription_end || "N/A"}\n`;
-    });
+  const handleExportPDF = async () => {
+    setIsExporting(true);
+    try {
+      const html = generateSalesReportHTML();
+      
+      if (Platform.OS === "web") {
+        const printWindow = window.open("", "_blank");
+        if (printWindow) {
+          printWindow.document.write(html);
+          printWindow.document.close();
+          printWindow.print();
+        }
+        return;
+      }
+
+      const fileName = `sales_report_${filter}_${Date.now()}`;
+      
+      try {
+        const { uri } = await Print.printToFileAsync({ html });
+        const isSharingAvailable = await Sharing.isAvailableAsync();
+        
+        if (isSharingAvailable) {
+          await Sharing.shareAsync(uri, { mimeType: "application/pdf", UTI: "com.adobe.pdf" });
+        } else {
+          const destPath = (FileSystem.documentDirectory || '') + `${fileName}.pdf`;
+          await FileSystem.copyAsync({ from: uri, to: destPath });
+          Alert.alert("Success", `PDF saved locally. File: ${fileName}.pdf`);
+        }
+      } catch (printError) {
+        const htmlPath = (FileSystem.documentDirectory || '') + `${fileName}.html`;
+        await FileSystem.writeAsStringAsync(htmlPath, html);
+        Alert.alert(
+          "PDF Unavailable", 
+          `Print service not available offline. Report saved as HTML file: ${fileName}.html`
+        );
+      }
+    } catch (error) {
+      console.log("PDF export error:", error);
+      Alert.alert("Error", "Failed to generate report. Please try again.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleExportMembersCSV = async () => {
+    const csv = generateMembersCSV();
 
     if (Platform.OS === "web") {
       const blob = new Blob([csv], { type: "text/csv" });
@@ -142,12 +398,60 @@ export default function ReportsScreen() {
     }
 
     try {
-      await Share.share({
-        message: csv,
-        title: "members_list.csv",
-      });
+      const fileUri = (FileSystem.documentDirectory || '') + "members_list.csv";
+      await FileSystem.writeAsStringAsync(fileUri, csv);
+      
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri, { mimeType: "text/csv" });
+      } else {
+        await Share.share({ message: csv, title: "members_list.csv" });
+      }
     } catch {
       Alert.alert("Error", "Failed to export members list.");
+    }
+  };
+
+  const handleExportMembersPDF = async () => {
+    setIsExporting(true);
+    try {
+      const html = generateMembersReportHTML();
+      
+      if (Platform.OS === "web") {
+        const printWindow = window.open("", "_blank");
+        if (printWindow) {
+          printWindow.document.write(html);
+          printWindow.document.close();
+          printWindow.print();
+        }
+        return;
+      }
+
+      const fileName = `members_list_${Date.now()}`;
+
+      try {
+        const { uri } = await Print.printToFileAsync({ html });
+        const isSharingAvailable = await Sharing.isAvailableAsync();
+        
+        if (isSharingAvailable) {
+          await Sharing.shareAsync(uri, { mimeType: "application/pdf", UTI: "com.adobe.pdf" });
+        } else {
+          const destPath = (FileSystem.documentDirectory || '') + `${fileName}.pdf`;
+          await FileSystem.copyAsync({ from: uri, to: destPath });
+          Alert.alert("Success", `PDF saved locally. File: ${fileName}.pdf`);
+        }
+      } catch (printError) {
+        const htmlPath = (FileSystem.documentDirectory || '') + `${fileName}.html`;
+        await FileSystem.writeAsStringAsync(htmlPath, html);
+        Alert.alert(
+          "PDF Unavailable", 
+          `Print service not available offline. Report saved as HTML file: ${fileName}.html`
+        );
+      }
+    } catch (error) {
+      console.log("PDF export error:", error);
+      Alert.alert("Error", "Failed to generate report. Please try again.");
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -190,7 +494,7 @@ export default function ReportsScreen() {
           <ThemedText style={[styles.summaryLabel, { color: theme.textSecondary }]}>
             Total Earnings
           </ThemedText>
-          <ThemedText type="h3">₱{totalEarnings.toLocaleString()}</ThemedText>
+          <ThemedText type="h3">P{totalEarnings.toLocaleString()}</ThemedText>
         </Card>
         <Card style={{ ...styles.summaryCard, borderLeftColor: theme.primary, borderLeftWidth: 4 }}>
           <ThemedText style={[styles.summaryLabel, { color: theme.textSecondary }]}>
@@ -243,7 +547,7 @@ export default function ReportsScreen() {
           Object.entries(salesByType).map(([type, amount]) => (
             <View key={type} style={styles.breakdownRow}>
               <ThemedText>{SALE_TYPE_LABELS[type] || type}</ThemedText>
-              <ThemedText style={{ fontWeight: "600" }}>₱{amount.toLocaleString()}</ThemedText>
+              <ThemedText style={{ fontWeight: "600" }}>P{amount.toLocaleString()}</ThemedText>
             </View>
           ))
         ) : (
@@ -255,22 +559,50 @@ export default function ReportsScreen() {
 
       <View style={styles.exportSection}>
         <ThemedText type="h4" style={styles.exportTitle}>
-          Export Reports
+          Export Sales Report
         </ThemedText>
         <View style={styles.exportButtons}>
+          <Pressable
+            onPress={handleExportPDF}
+            disabled={isExporting}
+            style={[styles.exportButton, { backgroundColor: theme.primary }]}
+          >
+            <Feather name="file-text" size={18} color="#FFFFFF" />
+            <ThemedText style={{ color: "#FFFFFF", fontWeight: "500" }}>
+              {isExporting ? "Generating..." : "Download PDF"}
+            </ThemedText>
+          </Pressable>
           <Pressable
             onPress={handleExportCSV}
             style={[styles.exportButton, { backgroundColor: theme.backgroundSecondary }]}
           >
             <Feather name="download" size={18} color={theme.text} />
-            <ThemedText>Sales Report (CSV)</ThemedText>
+            <ThemedText>Download CSV</ThemedText>
+          </Pressable>
+        </View>
+      </View>
+
+      <View style={styles.exportSection}>
+        <ThemedText type="h4" style={styles.exportTitle}>
+          Export Members List
+        </ThemedText>
+        <View style={styles.exportButtons}>
+          <Pressable
+            onPress={handleExportMembersPDF}
+            disabled={isExporting}
+            style={[styles.exportButton, { backgroundColor: theme.success }]}
+          >
+            <Feather name="users" size={18} color="#FFFFFF" />
+            <ThemedText style={{ color: "#FFFFFF", fontWeight: "500" }}>
+              {isExporting ? "Generating..." : "Download PDF"}
+            </ThemedText>
           </Pressable>
           <Pressable
-            onPress={handleExportMembersList}
+            onPress={handleExportMembersCSV}
             style={[styles.exportButton, { backgroundColor: theme.backgroundSecondary }]}
           >
-            <Feather name="users" size={18} color={theme.text} />
-            <ThemedText>Members List (CSV)</ThemedText>
+            <Feather name="download" size={18} color={theme.text} />
+            <ThemedText>Download CSV</ThemedText>
           </Pressable>
         </View>
       </View>
@@ -362,14 +694,18 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
   },
   exportButtons: {
+    flexDirection: "row",
     gap: Spacing.md,
+    flexWrap: "wrap",
   },
   exportButton: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: Spacing.lg,
+    paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.xl,
     borderRadius: BorderRadius.md,
-    gap: Spacing.md,
+    gap: Spacing.sm,
+    minWidth: 150,
+    justifyContent: "center",
   },
 });

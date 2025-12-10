@@ -1,10 +1,18 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { View, StyleSheet, Pressable, Alert, Image, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Audio } from "expo-av";
 import * as Haptics from "expo-haptics";
+import * as Linking from "expo-linking";
 import { Feather } from "@expo/vector-icons";
+import Animated, { 
+  useSharedValue, 
+  useAnimatedStyle, 
+  withRepeat, 
+  withTiming,
+  withSequence,
+} from "react-native-reanimated";
 
 import { useTheme } from "@/hooks/useTheme";
 import { useApp, Member } from "@/context/AppContext";
@@ -12,6 +20,8 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
 import { Spacing, BorderRadius } from "@/constants/theme";
+
+const NO_QR_RESET_DELAY = 3000;
 
 export default function ScanQRScreen() {
   const { theme } = useTheme();
@@ -22,26 +32,73 @@ export default function ScanQRScreen() {
   const [scannedMember, setScannedMember] = useState<Member | null>(null);
   const [showResult, setShowResult] = useState(false);
   const [lastScanTime, setLastScanTime] = useState(0);
+  const [noQRDetected, setNoQRDetected] = useState(true);
   const soundRef = useRef<Audio.Sound | null>(null);
+  const noQRTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const scanLinePosition = useSharedValue(0);
 
   useEffect(() => {
+    const loadSound = async () => {
+      try {
+        await Audio.setAudioModeAsync({
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+        });
+        const { sound } = await Audio.Sound.createAsync(
+          require("../../assets/sounds/beep.mp3"),
+          { volume: 1.0 }
+        );
+        soundRef.current = sound;
+      } catch (error) {
+        console.log("Failed to load beep sound:", error);
+      }
+    };
+    
+    loadSound();
+    
+    scanLinePosition.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 2000 }),
+        withTiming(0, { duration: 2000 })
+      ),
+      -1,
+      false
+    );
+
     return () => {
       if (soundRef.current) {
         soundRef.current.unloadAsync();
+        soundRef.current = null;
+      }
+      if (noQRTimeoutRef.current) {
+        clearTimeout(noQRTimeoutRef.current);
       }
     };
   }, []);
 
-  const playBeep = async () => {
-    try {
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: "https://actions.google.com/sounds/v1/alarms/beep_short.ogg" },
-        { shouldPlay: true }
-      );
-      soundRef.current = sound;
-    } catch {
+  const resetNoQRMessage = useCallback(() => {
+    if (noQRTimeoutRef.current) {
+      clearTimeout(noQRTimeoutRef.current);
     }
-  };
+    noQRTimeoutRef.current = setTimeout(() => {
+      setNoQRDetected(true);
+    }, NO_QR_RESET_DELAY);
+  }, []);
+
+  const scanLineStyle = useAnimatedStyle(() => ({
+    top: `${scanLinePosition.value * 100}%`,
+  }));
+
+  const playBeep = useCallback(async () => {
+    try {
+      if (soundRef.current) {
+        await soundRef.current.setPositionAsync(0);
+        await soundRef.current.playAsync();
+      }
+    } catch (error) {
+      console.log("Sound playback error:", error);
+    }
+  }, []);
 
   const isSubscriptionActive = (member: Member): boolean => {
     if (!member.subscription_end) return false;
@@ -49,7 +106,10 @@ export default function ScanQRScreen() {
     return member.subscription_end >= today;
   };
 
-  const handleBarCodeScanned = ({ data }: { data: string }) => {
+  const handleBarCodeScanned = useCallback(({ data }: { data: string }) => {
+    setNoQRDetected(false);
+    resetNoQRMessage();
+    
     const now = Date.now();
     if (now - lastScanTime < 5000) return;
     setLastScanTime(now);
@@ -71,11 +131,12 @@ export default function ScanQRScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setScannedMember(member);
     setShowResult(true);
-  };
+  }, [lastScanTime, getMemberByQR, playBeep, resetNoQRMessage]);
 
   const handleRecordAttendance = () => {
     if (scannedMember) {
       addAttendance(scannedMember.id);
+      playBeep();
       Alert.alert("Success", "Attendance recorded successfully!");
       setShowResult(false);
       setScannedMember(null);
@@ -86,6 +147,7 @@ export default function ScanQRScreen() {
     if (scannedMember) {
       renewSubscription(scannedMember.id);
       addAttendance(scannedMember.id);
+      playBeep();
       Alert.alert("Success", "Subscription renewed and attendance recorded!");
       setShowResult(false);
       setScannedMember(null);
@@ -95,6 +157,7 @@ export default function ScanQRScreen() {
   const handlePaySession = () => {
     if (scannedMember) {
       paySession(scannedMember.id, true);
+      playBeep();
       Alert.alert("Success", "Session payment recorded and attendance logged!");
       setShowResult(false);
       setScannedMember(null);
@@ -103,12 +166,24 @@ export default function ScanQRScreen() {
 
   const handleWalkIn = () => {
     paySession(0, false);
-    Alert.alert("Success", `Walk-in session recorded. Amount: ₱${priceSettings.session_nonmember}`);
+    playBeep();
+    Alert.alert("Success", `Walk-in session recorded. Amount: P${priceSettings.session_nonmember}`);
   };
 
   const handleClose = () => {
     setShowResult(false);
     setScannedMember(null);
+    setNoQRDetected(true);
+  };
+
+  const openSettings = async () => {
+    if (Platform.OS !== "web") {
+      try {
+        await Linking.openSettings();
+      } catch {
+        Alert.alert("Error", "Unable to open settings");
+      }
+    }
   };
 
   if (!permission) {
@@ -135,14 +210,48 @@ export default function ScanQRScreen() {
         <ThemedText style={[styles.permissionText, { color: theme.textSecondary }]}>
           We need camera access to scan member QR codes
         </ThemedText>
-        <Pressable
-          onPress={requestPermission}
-          style={[styles.permissionButton, { backgroundColor: theme.primary }]}
-        >
-          <ThemedText style={{ color: "#FFFFFF", fontWeight: "600" }}>
-            Enable Camera
+        
+        {permission.canAskAgain ? (
+          <Pressable
+            onPress={requestPermission}
+            style={[styles.permissionButton, { backgroundColor: theme.primary }]}
+          >
+            <ThemedText style={{ color: "#FFFFFF", fontWeight: "600" }}>
+              Enable Camera
+            </ThemedText>
+          </Pressable>
+        ) : (
+          <View style={styles.settingsContainer}>
+            <ThemedText style={[styles.permissionText, { color: theme.textSecondary }]}>
+              Please enable camera in your device settings
+            </ThemedText>
+            {Platform.OS !== "web" ? (
+              <Pressable
+                onPress={openSettings}
+                style={[styles.permissionButton, { backgroundColor: theme.primary }]}
+              >
+                <ThemedText style={{ color: "#FFFFFF", fontWeight: "600" }}>
+                  Open Settings
+                </ThemedText>
+              </Pressable>
+            ) : null}
+          </View>
+        )}
+        
+        <View style={styles.walkInSection}>
+          <ThemedText style={[styles.walkInLabel, { color: theme.textSecondary }]}>
+            Or record a walk-in session:
           </ThemedText>
-        </Pressable>
+          <Pressable
+            onPress={handleWalkIn}
+            style={[styles.walkInButton, { backgroundColor: theme.success }]}
+          >
+            <Feather name="user-plus" size={20} color="#FFFFFF" />
+            <ThemedText style={{ color: "#FFFFFF", fontWeight: "600" }}>
+              Walk-in Session (P{priceSettings.session_nonmember})
+            </ThemedText>
+          </Pressable>
+        </View>
       </ThemedView>
     );
   }
@@ -174,7 +283,7 @@ export default function ScanQRScreen() {
           >
             <Feather name="user-plus" size={20} color="#FFFFFF" />
             <ThemedText style={{ color: "#FFFFFF", fontWeight: "600" }}>
-              Walk-in Session (₱{priceSettings.session_nonmember})
+              Walk-in Session (P{priceSettings.session_nonmember})
             </ThemedText>
           </Pressable>
         </View>
@@ -192,10 +301,21 @@ export default function ScanQRScreen() {
 
       <View style={[styles.overlay, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         <View style={styles.scanArea}>
-          <View style={[styles.corner, styles.topLeft]} />
-          <View style={[styles.corner, styles.topRight]} />
-          <View style={[styles.corner, styles.bottomLeft]} />
-          <View style={[styles.corner, styles.bottomRight]} />
+          <View style={[styles.corner, styles.topLeft, { borderColor: theme.primary }]} />
+          <View style={[styles.corner, styles.topRight, { borderColor: theme.primary }]} />
+          <View style={[styles.corner, styles.bottomLeft, { borderColor: theme.primary }]} />
+          <View style={[styles.corner, styles.bottomRight, { borderColor: theme.primary }]} />
+          
+          <Animated.View style={[styles.scanLine, { backgroundColor: theme.primary }, scanLineStyle]} />
+        </View>
+
+        <View style={styles.statusContainer}>
+          {noQRDetected ? (
+            <View style={[styles.statusBadgeSmall, { backgroundColor: "rgba(0,0,0,0.7)" }]}>
+              <Feather name="search" size={16} color="#FFFFFF" />
+              <ThemedText style={styles.statusText}>No QR code detected</ThemedText>
+            </View>
+          ) : null}
         </View>
 
         <ThemedText style={styles.scanText}>
@@ -309,12 +429,15 @@ const styles = StyleSheet.create({
   },
   permissionText: {
     textAlign: "center",
-    marginBottom: Spacing["2xl"],
+    marginBottom: Spacing.lg,
   },
   permissionButton: {
     paddingVertical: Spacing.lg,
     paddingHorizontal: Spacing["3xl"],
     borderRadius: BorderRadius.full,
+  },
+  settingsContainer: {
+    alignItems: "center",
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
@@ -325,40 +448,66 @@ const styles = StyleSheet.create({
     width: 250,
     height: 250,
     position: "relative",
+    overflow: "hidden",
   },
   corner: {
     position: "absolute",
-    width: 30,
-    height: 30,
-    borderColor: "#FFFFFF",
+    width: 40,
+    height: 40,
   },
   topLeft: {
     top: 0,
     left: 0,
-    borderTopWidth: 3,
-    borderLeftWidth: 3,
+    borderTopWidth: 4,
+    borderLeftWidth: 4,
+    borderTopLeftRadius: 8,
   },
   topRight: {
     top: 0,
     right: 0,
-    borderTopWidth: 3,
-    borderRightWidth: 3,
+    borderTopWidth: 4,
+    borderRightWidth: 4,
+    borderTopRightRadius: 8,
   },
   bottomLeft: {
     bottom: 0,
     left: 0,
-    borderBottomWidth: 3,
-    borderLeftWidth: 3,
+    borderBottomWidth: 4,
+    borderLeftWidth: 4,
+    borderBottomLeftRadius: 8,
   },
   bottomRight: {
     bottom: 0,
     right: 0,
-    borderBottomWidth: 3,
-    borderRightWidth: 3,
+    borderBottomWidth: 4,
+    borderRightWidth: 4,
+    borderBottomRightRadius: 8,
+  },
+  scanLine: {
+    position: "absolute",
+    left: 10,
+    right: 10,
+    height: 2,
+  },
+  statusContainer: {
+    marginTop: Spacing.xl,
+    height: 30,
+  },
+  statusBadgeSmall: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: BorderRadius.full,
+    gap: Spacing.sm,
+  },
+  statusText: {
+    color: "#FFFFFF",
+    fontSize: 14,
   },
   scanText: {
     color: "#FFFFFF",
-    marginTop: Spacing["2xl"],
+    marginTop: Spacing.lg,
     fontSize: 16,
   },
   walkInFloating: {

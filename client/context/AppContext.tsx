@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
-import { Appearance, Platform } from 'react-native';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
+import { Appearance, Platform, Alert } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import * as database from '@/lib/database';
 
@@ -122,14 +122,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const loadDataFromDatabase = useCallback(async () => {
     try {
-      const [members, attendance, sales, priceSettings, hasPinStored] = await Promise.all([
+      const [members, attendance, sales, priceSettings, appSettings, hasPinStored] = await Promise.all([
         database.getAllMembers(),
         database.getAllAttendance(),
         database.getAllSales(),
         database.getPriceSettings(),
+        database.getAppSettings(),
         checkHasPin(),
       ]);
 
+      const dbDarkMode = appSettings?.is_dark_mode === 1;
+      
       setState(prev => ({
         ...prev,
         members: members.map(m => ({
@@ -148,6 +151,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           note: s.note || '',
         })),
         priceSettings,
+        isDarkMode: dbDarkMode,
         hasPin: hasPinStored,
         isLoading: false,
       }));
@@ -173,12 +177,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState(prev => ({ ...prev, hasPin: value }));
   }, []);
 
-  const toggleTheme = useCallback(() => {
-    setState(prev => ({ ...prev, isDarkMode: !prev.isDarkMode }));
-  }, []);
+  const toggleTheme = useCallback(async () => {
+    const currentDarkMode = state.isDarkMode;
+    const newDarkMode = !currentDarkMode;
+    
+    try {
+      await database.updateAppSettings({ is_dark_mode: newDarkMode ? 1 : 0 });
+      setState(prev => ({ ...prev, isDarkMode: newDarkMode }));
+    } catch (error) {
+      console.error('Failed to persist theme setting:', error);
+    }
+  }, [state.isDarkMode]);
 
-  const setDarkMode = useCallback((value: boolean) => {
-    setState(prev => ({ ...prev, isDarkMode: value }));
+  const setDarkMode = useCallback(async (value: boolean) => {
+    try {
+      await database.updateAppSettings({ is_dark_mode: value ? 1 : 0 });
+      setState(prev => ({ ...prev, isDarkMode: value }));
+    } catch (error) {
+      console.error('Failed to persist theme setting:', error);
+    }
   }, []);
 
   const generateQRCode = (id: number): string => {
