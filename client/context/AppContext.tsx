@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
-import { Appearance } from 'react-native';
+import { Appearance, Platform } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
+import * as database from '@/lib/database';
 
 export interface Member {
   id: number;
@@ -51,6 +53,7 @@ interface AppState {
   attendance: Attendance[];
   sales: Sale[];
   priceSettings: PriceSettings;
+  isLoading: boolean;
 }
 
 interface AppContextType extends AppState {
@@ -58,20 +61,21 @@ interface AppContextType extends AppState {
   setHasPin: (value: boolean) => void;
   toggleTheme: () => void;
   setDarkMode: (value: boolean) => void;
-  addMember: (member: Omit<Member, 'id' | 'qr_code' | 'qr_image_path'>) => Member;
-  updateMember: (id: number, updates: Partial<Member>) => void;
-  deleteMember: (id: number) => void;
+  addMember: (member: Omit<Member, 'id' | 'qr_code' | 'qr_image_path'>) => Promise<Member>;
+  updateMember: (id: number, updates: Partial<Member>) => Promise<void>;
+  deleteMember: (id: number) => Promise<void>;
   getMember: (id: number) => Member | undefined;
   getMemberByQR: (qrCode: string) => Member | undefined;
-  addAttendance: (memberId: number) => void;
-  addSale: (type: string, amount: number, note: string) => void;
-  updatePriceSettings: (settings: Partial<PriceSettings>) => void;
+  addAttendance: (memberId: number) => Promise<void>;
+  addSale: (type: string, amount: number, note: string) => Promise<void>;
+  updatePriceSettings: (settings: Partial<PriceSettings>) => Promise<void>;
   getTodayAttendance: () => Attendance[];
   getTodaySales: () => number;
   getActiveMembers: () => Member[];
   getExpiredMembers: () => Member[];
-  renewSubscription: (memberId: number) => void;
-  paySession: (memberId: number, isMember: boolean) => void;
+  renewSubscription: (memberId: number) => Promise<void>;
+  paySession: (memberId: number, isMember: boolean) => Promise<void>;
+  refreshData: () => Promise<void>;
 }
 
 const defaultPriceSettings: PriceSettings = {
@@ -86,6 +90,24 @@ const defaultPriceSettings: PriceSettings = {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+const PIN_STORAGE_KEY = 'powerlift_gym_pin';
+
+async function getStoredPin(): Promise<string | null> {
+  try {
+    if (Platform.OS === 'web') {
+      return localStorage.getItem(PIN_STORAGE_KEY);
+    }
+    return await SecureStore.getItemAsync(PIN_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+async function checkHasPin(): Promise<boolean> {
+  const pin = await getStoredPin();
+  return !!pin;
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>({
     isAuthenticated: false,
@@ -95,7 +117,53 @@ export function AppProvider({ children }: { children: ReactNode }) {
     attendance: [],
     sales: [],
     priceSettings: defaultPriceSettings,
+    isLoading: true,
   });
+
+  const loadDataFromDatabase = useCallback(async () => {
+    try {
+      const [members, attendance, sales, priceSettings, hasPinStored] = await Promise.all([
+        database.getAllMembers(),
+        database.getAllAttendance(),
+        database.getAllSales(),
+        database.getPriceSettings(),
+        checkHasPin(),
+      ]);
+
+      setState(prev => ({
+        ...prev,
+        members: members.map(m => ({
+          ...m,
+          email: m.email || '',
+          phone: m.phone || '',
+          photo: m.photo || '',
+          qr_image_path: m.qr_image_path || '',
+          membership_type: m.membership_type as 'student' | 'regular' | 'senior',
+        })),
+        attendance: attendance.map(a => ({
+          ...a,
+        })),
+        sales: sales.map(s => ({
+          ...s,
+          note: s.note || '',
+        })),
+        priceSettings,
+        hasPin: hasPinStored,
+        isLoading: false,
+      }));
+    } catch (error) {
+      console.error('Failed to load data from database:', error);
+      setState(prev => ({ ...prev, isLoading: false }));
+    }
+  }, []);
+
+  useEffect(() => {
+    loadDataFromDatabase();
+  }, [loadDataFromDatabase]);
+
+  const refreshData = useCallback(async () => {
+    await loadDataFromDatabase();
+  }, [loadDataFromDatabase]);
 
   const setAuthenticated = useCallback((value: boolean) => {
     setState(prev => ({ ...prev, isAuthenticated: value }));
@@ -117,27 +185,50 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return `GYM-${id.toString().padStart(6, '0')}`;
   };
 
-  const addMember = useCallback((memberData: Omit<Member, 'id' | 'qr_code' | 'qr_image_path'>): Member => {
-    const id = Date.now();
-    const qr_code = generateQRCode(id);
+  const addMember = useCallback(async (memberData: Omit<Member, 'id' | 'qr_code' | 'qr_image_path'>): Promise<Member> => {
+    const tempId = Date.now();
+    const qr_code = generateQRCode(tempId);
+    
+    const id = await database.insertMember({
+      firstname: memberData.firstname,
+      lastname: memberData.lastname,
+      age: memberData.age,
+      gender: memberData.gender,
+      email: memberData.email || null,
+      phone: memberData.phone || null,
+      photo: memberData.photo || null,
+      qr_code: generateQRCode(tempId),
+      qr_image_path: null,
+      membership_type: memberData.membership_type,
+      is_member: memberData.is_member,
+      subscription_start: memberData.subscription_start,
+      subscription_end: memberData.subscription_end,
+    });
+
+    const finalQRCode = generateQRCode(id);
+    await database.updateMemberById(id, { qr_code: finalQRCode });
+
     const newMember: Member = {
       ...memberData,
       id,
-      qr_code,
+      qr_code: finalQRCode,
       qr_image_path: '',
     };
-    setState(prev => ({ ...prev, members: [...prev.members, newMember] }));
+
+    setState(prev => ({ ...prev, members: [newMember, ...prev.members] }));
     return newMember;
   }, []);
 
-  const updateMember = useCallback((id: number, updates: Partial<Member>) => {
+  const updateMember = useCallback(async (id: number, updates: Partial<Member>) => {
+    await database.updateMemberById(id, updates);
     setState(prev => ({
       ...prev,
       members: prev.members.map(m => m.id === id ? { ...m, ...updates } : m),
     }));
   }, []);
 
-  const deleteMember = useCallback((id: number) => {
+  const deleteMember = useCallback(async (id: number) => {
+    await database.deleteMemberById(id);
     setState(prev => ({
       ...prev,
       members: prev.members.filter(m => m.id !== id),
@@ -152,29 +243,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return state.members.find(m => m.qr_code === qrCode);
   }, [state.members]);
 
-  const addAttendance = useCallback((memberId: number) => {
+  const addAttendance = useCallback(async (memberId: number) => {
     const now = new Date();
-    const attendance: Attendance = {
-      id: Date.now(),
+    const attendanceData = {
       member_id: memberId,
       date: now.toISOString().split('T')[0],
       time: now.toTimeString().split(' ')[0],
     };
-    setState(prev => ({ ...prev, attendance: [...prev.attendance, attendance] }));
+    
+    const id = await database.insertAttendance(attendanceData);
+    
+    const attendance: Attendance = {
+      id,
+      ...attendanceData,
+    };
+    setState(prev => ({ ...prev, attendance: [attendance, ...prev.attendance] }));
   }, []);
 
-  const addSale = useCallback((type: string, amount: number, note: string) => {
-    const sale: Sale = {
-      id: Date.now(),
+  const addSale = useCallback(async (type: string, amount: number, note: string) => {
+    const saleData = {
       type,
       amount,
       date: new Date().toISOString().split('T')[0],
       note,
     };
-    setState(prev => ({ ...prev, sales: [...prev.sales, sale] }));
+    
+    const id = await database.insertSale(saleData);
+    
+    const sale: Sale = {
+      id,
+      ...saleData,
+    };
+    setState(prev => ({ ...prev, sales: [sale, ...prev.sales] }));
   }, []);
 
-  const updatePriceSettings = useCallback((settings: Partial<PriceSettings>) => {
+  const updatePriceSettings = useCallback(async (settings: Partial<PriceSettings>) => {
+    await database.updatePriceSettingsDB(settings);
     setState(prev => ({
       ...prev,
       priceSettings: { ...prev.priceSettings, ...settings },
@@ -207,7 +311,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
   }, [state.members]);
 
-  const renewSubscription = useCallback((memberId: number) => {
+  const renewSubscription = useCallback(async (memberId: number) => {
     const member = state.members.find(m => m.id === memberId);
     if (!member) return;
 
@@ -218,15 +322,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const priceKey = `${member.membership_type}_monthly` as keyof PriceSettings;
     const amount = state.priceSettings[priceKey] as number;
 
-    updateMember(memberId, {
+    await updateMember(memberId, {
       subscription_start: today.toISOString().split('T')[0],
       subscription_end: endDate.toISOString().split('T')[0],
     });
 
-    addSale(`monthly_${member.membership_type}`, amount, `Monthly subscription for ${member.firstname} ${member.lastname}`);
+    await addSale(`monthly_${member.membership_type}`, amount, `Monthly subscription for ${member.firstname} ${member.lastname}`);
   }, [state.members, state.priceSettings, updateMember, addSale]);
 
-  const paySession = useCallback((memberId: number, isMember: boolean) => {
+  const paySession = useCallback(async (memberId: number, isMember: boolean) => {
     const member = state.members.find(m => m.id === memberId);
     const amount = isMember ? state.priceSettings.session_member : state.priceSettings.session_nonmember;
     const type = isMember ? 'session_member' : 'session_nonmember';
@@ -234,9 +338,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ? `Session for ${member.firstname} ${member.lastname}`
       : 'Walk-in session';
     
-    addSale(type, amount, note);
+    await addSale(type, amount, note);
     if (memberId > 0) {
-      addAttendance(memberId);
+      await addAttendance(memberId);
     }
   }, [state.members, state.priceSettings, addSale, addAttendance]);
 
@@ -262,6 +366,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         getExpiredMembers,
         renewSubscription,
         paySession,
+        refreshData,
       }}
     >
       {children}
