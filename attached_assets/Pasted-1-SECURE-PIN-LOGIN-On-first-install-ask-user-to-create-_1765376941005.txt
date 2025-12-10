@@ -1,0 +1,159 @@
+1. SECURE PIN LOGIN  
+   - On first install → ask user to **create a 4-digit PIN**.  
+   - Future launches → ask user to **enter PIN**.  
+   - Store PIN using Flutter Secure Storage.  
+   - UI Requirements:
+     - Centered Powerlift Fitness Gym logo (not zoomed or stretched)
+     - Title: “Welcome to Powerlift Fitness Gym”
+     - PIN input field
+     - Footer: “Developed by Rov · 2025”
+   - Dark mode = default.
+
+2. SIDEBAR REQUIREMENTS  
+   - No overflow when collapsed.
+   - Collapsed width ≈ 70  
+   - Expanded width ≈ 230  
+   - Items:
+       Dashboard  
+       Register  
+       Scan QR  
+       Members  
+       Reports  
+       Settings  
+   - Theme toggle at bottom.
+   - Professional layout with icons and label.
+   - Adaptive UI: never triggers "Right Overflowed" UI error.
+
+3. REGISTRATION MODULE  
+   Registering a person should include:
+   - First name  
+   - Last name  
+   - Gender  
+   - Age  
+   - Email  
+   - Phone  
+   - Take profile photo  
+   - Select **Membership Type**:
+       student / regular / senior  
+   - Select **Registration Option**:
+       A. Member Only  
+       B. Member + Monthly Subscription  
+       C. Member + Per Session  
+
+   **Rules:**
+   - Membership (full membership) is yearly (lifetime QR).
+   - Monthly subscription is separate.
+   - Student • Regular • Senior → different monthly rates.
+   - Session pricing depends on:
+       - session_member  
+       - session_nonmember  
+
+   **Subscription Rules:**
+   - If subscribing today:
+       subscription_start = today  
+       subscription_end = same day next month  
+   - If expired:
+       Example: expired March 1, today is March 5 → new expiry = April 5
+
+   **Sales should record automatically** based on the choice.
+
+4. QR SCAN MODULE (MUST BE FULLY IMPLEMENTED)
+   Using mobile_scanner:
+   - On successful scan:
+       - Play beep sound
+       - Validate QR format → must start with **GYM-**
+       - Lookup member by qr_code
+   - If no match:
+       - Vibrate
+       - Show red popup: “QR not recognized”
+   - If found:
+       Display:
+         - Full name
+         - Membership type (student / regular / senior)
+         - Subscription status (active / expired)
+         - Expiry date
+         - Profile photo
+   - Decision Flow:
+     A. If subscription is ACTIVE → record attendance.
+     B. If EXPIRED → ask:
+        1. Renew monthly subscription  
+        2. Pay per session  
+     C. If Member-Only with no subscription → offer:
+        - Monthly subscription  
+        - Per session  
+     D. If Non-member (walk-in, no QR):
+        - Not stored in database  
+        - Manual session sale only  
+
+   **Required actions in QR scanner:**
+   - Beep sound → assets/sounds/beep.mp3
+   - Error vibration → HapticFeedback.mediumImpact()
+   - Save record:
+       - attendance table
+       - sales table (if applicable)
+
+   **Validations:**
+   - Prevent double scan within 5 seconds.
+   - Prevent scanning invalid QR images.
+   - Detect QR image from gallery (optional fallback).
+
+5. DASHBOARD MODULE  
+   Must display:
+   - Total Active Members
+   - Total Expired Members
+   - Today Check-ins
+   - Today Check-outs (optional, but allow counting)
+   - Today Sales in pesos
+
+   Stat cards must be redesigned:
+   - Red accent
+   - Clean spacing
+   - Professional gym-style cards
+
+6. MEMBER LIST MODULE  
+   - Search bar  
+   - Grid list of members  
+   - Each card shows:
+       - Profile pic  
+       - Name  
+       - Tap → Open Member Profile Screen  
+
+   Member Profile Screen should show:
+   - Name  
+   - Member type  
+   - Subscription start / end  
+   - Button to renew subscription  
+   - Button to pay per session  
+   - Button to view membership card (QR)  
+
+7. REPORTS MODULE  
+   - Filters: Daily / Weekly / Monthly  
+   - Summary cards:
+       Total Earnings  
+       Total Attendance  
+   - Bar chart using fl_chart  
+   - List of earnings per day  
+   - Sales breakdown (important):
+       - membership_fee  
+       - monthly_student  
+       - monthly_regular  
+       - monthly_senior  
+       - session_member  
+       - session_nonmember  
+
+8. SETTINGS MODULE  
+   Pricing fields editable:
+   - membership_fee  
+   - student_monthly  
+   - regular_monthly  
+   - senior_monthly  
+   - session_member  
+   - session_nonmember  
+
+9. THEME SYSTEM  
+   Light theme:
+   - white background  
+   - red primary  
+   Dark theme:
+   - black background  
+   - red primary  
