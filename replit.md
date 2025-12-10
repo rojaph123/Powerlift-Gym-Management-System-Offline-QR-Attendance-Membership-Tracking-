@@ -32,7 +32,7 @@ Preferred communication style: Simple, everyday language.
 6. **MemberDetailScreen** - Individual member profile and history
 7. **MemberCardScreen** - Printable/shareable member ID card with QR
 8. **ReportsScreen** - Sales and attendance reports with export
-9. **SettingsScreen** - Price configuration for memberships and sessions
+9. **SettingsScreen** - Price configuration, dark/light mode toggle with SQLite persistence
 
 ### Data Storage Architecture
 - **Native (iOS/Android)**: SQLite via expo-sqlite for persistent local storage
@@ -51,6 +51,7 @@ Preferred communication style: Simple, everyday language.
 - **Attendance**: Member check-in/check-out records
 - **Sales**: Transaction records for memberships, subscriptions, and sessions
 - **Price Settings**: Configurable pricing for all membership and session types
+- **App Settings**: Theme preference (dark/light mode) persisted in SQLite
 
 ### Path Aliases
 - `@/` → `./client/` (frontend code)
@@ -116,3 +117,6 @@ If you prefer to build locally:
 - All data is stored locally in SQLite on the device
 - No internet connection is required for daily use
 - First launch will prompt you to create a 4-digit PIN
+- Theme preference (dark/light mode) is saved and persists across app restarts
+- QR scanner includes audio feedback on successful scans
+- Reports can be exported as PDF or CSV, with offline-safe fallbacks
