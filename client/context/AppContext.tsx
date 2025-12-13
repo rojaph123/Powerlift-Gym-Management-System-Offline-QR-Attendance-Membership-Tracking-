@@ -1,7 +1,14 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
-import { Appearance, Platform, Alert } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
-import * as database from '@/lib/database';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect,
+  ReactNode,
+} from "react";
+import { Appearance, Platform } from "react-native";
+import * as SecureStore from "expo-secure-store";
+import * as database from "@/lib/database";
 
 export interface Member {
   id: number;
@@ -14,7 +21,7 @@ export interface Member {
   photo: string;
   qr_code: string;
   qr_image_path: string;
-  membership_type: 'student' | 'regular' | 'senior';
+  membership_type: "student" | "regular" | "senior";
   is_member: number;
   subscription_start: string | null;
   subscription_end: string | null;
@@ -54,6 +61,7 @@ interface AppState {
   sales: Sale[];
   priceSettings: PriceSettings;
   isLoading: boolean;
+  timeoutDisabled: boolean; // NEW
 }
 
 interface AppContextType extends AppState {
@@ -61,7 +69,10 @@ interface AppContextType extends AppState {
   setHasPin: (value: boolean) => void;
   toggleTheme: () => void;
   setDarkMode: (value: boolean) => void;
-  addMember: (member: Omit<Member, 'id' | 'qr_code' | 'qr_image_path'>) => Promise<Member>;
+  setTimeoutDisabled: (value: boolean) => void; // NEW
+  addMember: (
+    member: Omit<Member, "id" | "qr_code" | "qr_image_path">
+  ) => Promise<Member>;
   updateMember: (id: number, updates: Partial<Member>) => Promise<void>;
   deleteMember: (id: number) => Promise<void>;
   getMember: (id: number) => Member | undefined;
@@ -90,11 +101,11 @@ const defaultPriceSettings: PriceSettings = {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const PIN_STORAGE_KEY = 'powerlift_gym_pin';
+const PIN_STORAGE_KEY = "powerlift_gym_pin";
 
 async function getStoredPin(): Promise<string | null> {
   try {
-    if (Platform.OS === 'web') {
+    if (Platform.OS === "web") {
       return localStorage.getItem(PIN_STORAGE_KEY);
     }
     return await SecureStore.getItemAsync(PIN_STORAGE_KEY);
@@ -112,17 +123,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>({
     isAuthenticated: false,
     hasPin: false,
-    isDarkMode: Appearance.getColorScheme() === 'dark',
+    isDarkMode: Appearance.getColorScheme() === "dark",
     members: [],
     attendance: [],
     sales: [],
     priceSettings: defaultPriceSettings,
     isLoading: true,
+    timeoutDisabled: false, // NEW DEFAULT
   });
 
   const loadDataFromDatabase = useCallback(async () => {
     try {
-      const [members, attendance, sales, priceSettings, appSettings, hasPinStored] = await Promise.all([
+      const [
+        members,
+        attendance,
+        sales,
+        priceSettings,
+        appSettings,
+        hasPinStored,
+      ] = await Promise.all([
         database.getAllMembers(),
         database.getAllAttendance(),
         database.getAllSales(),
@@ -132,32 +151,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ]);
 
       const dbDarkMode = appSettings?.is_dark_mode === 1;
-      
-      setState(prev => ({
+
+      setState((prev) => ({
         ...prev,
-        members: members.map(m => ({
+        members: members.map((m) => ({
           ...m,
-          email: m.email || '',
-          phone: m.phone || '',
-          photo: m.photo || '',
-          qr_image_path: m.qr_image_path || '',
-          membership_type: m.membership_type as 'student' | 'regular' | 'senior',
+          email: m.email || "",
+          phone: m.phone || "",
+          photo: m.photo || "",
+          qr_image_path: m.qr_image_path || "",
+          membership_type: m.membership_type as "student" | "regular" | "senior",
         })),
-        attendance: attendance.map(a => ({
-          ...a,
-        })),
-        sales: sales.map(s => ({
-          ...s,
-          note: s.note || '',
-        })),
+        attendance,
+        sales: sales.map((s) => ({ ...s, note: s.note || "" })),
         priceSettings,
         isDarkMode: dbDarkMode,
         hasPin: hasPinStored,
         isLoading: false,
       }));
     } catch (error) {
-      console.error('Failed to load data from database:', error);
-      setState(prev => ({ ...prev, isLoading: false }));
+      console.error("Failed to load data from database:", error);
+      setState((prev) => ({ ...prev, isLoading: false }));
     }
   }, []);
 
@@ -170,196 +184,214 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [loadDataFromDatabase]);
 
   const setAuthenticated = useCallback((value: boolean) => {
-    setState(prev => ({ ...prev, isAuthenticated: value }));
+    setState((prev) => ({ ...prev, isAuthenticated: value }));
   }, []);
 
   const setHasPin = useCallback((value: boolean) => {
-    setState(prev => ({ ...prev, hasPin: value }));
+    setState((prev) => ({ ...prev, hasPin: value }));
+  }, []);
+
+  const setTimeoutDisabled = useCallback((value: boolean) => {
+    setState((prev) => ({ ...prev, timeoutDisabled: value }));
   }, []);
 
   const toggleTheme = useCallback(async () => {
-    const currentDarkMode = state.isDarkMode;
-    const newDarkMode = !currentDarkMode;
-    
+    const newDarkMode = !state.isDarkMode;
     try {
       await database.updateAppSettings({ is_dark_mode: newDarkMode ? 1 : 0 });
-      setState(prev => ({ ...prev, isDarkMode: newDarkMode }));
+      setState((prev) => ({ ...prev, isDarkMode: newDarkMode }));
     } catch (error) {
-      console.error('Failed to persist theme setting:', error);
+      console.error("Failed to persist theme setting:", error);
     }
   }, [state.isDarkMode]);
 
   const setDarkMode = useCallback(async (value: boolean) => {
     try {
       await database.updateAppSettings({ is_dark_mode: value ? 1 : 0 });
-      setState(prev => ({ ...prev, isDarkMode: value }));
+      setState((prev) => ({ ...prev, isDarkMode: value }));
     } catch (error) {
-      console.error('Failed to persist theme setting:', error);
+      console.error("Failed to persist theme setting:", error);
     }
   }, []);
 
   const generateQRCode = (id: number): string => {
-    return `GYM-${id.toString().padStart(6, '0')}`;
+    return `GYM-${id.toString().padStart(6, "0")}`;
   };
 
-  const addMember = useCallback(async (memberData: Omit<Member, 'id' | 'qr_code' | 'qr_image_path'>): Promise<Member> => {
-    const tempId = Date.now();
-    const qr_code = generateQRCode(tempId);
-    
-    const id = await database.insertMember({
-      firstname: memberData.firstname,
-      lastname: memberData.lastname,
-      age: memberData.age,
-      gender: memberData.gender,
-      email: memberData.email || null,
-      phone: memberData.phone || null,
-      photo: memberData.photo || null,
-      qr_code: generateQRCode(tempId),
-      qr_image_path: null,
-      membership_type: memberData.membership_type,
-      is_member: memberData.is_member,
-      subscription_start: memberData.subscription_start,
-      subscription_end: memberData.subscription_end,
-    });
+  const addMember = useCallback(
+    async (
+      memberData: Omit<Member, "id" | "qr_code" | "qr_image_path">
+    ): Promise<Member> => {
+      const tempId = Date.now();
+      const id = await database.insertMember({
+        ...memberData,
+        qr_code: generateQRCode(tempId),
+        qr_image_path: null,
+      });
 
-    const finalQRCode = generateQRCode(id);
-    await database.updateMemberById(id, { qr_code: finalQRCode });
+      const finalQRCode = generateQRCode(id);
+      await database.updateMemberById(id, { qr_code: finalQRCode });
 
-    const newMember: Member = {
-      ...memberData,
-      id,
-      qr_code: finalQRCode,
-      qr_image_path: '',
-    };
+      const newMember: Member = {
+        ...memberData,
+        id,
+        qr_code: finalQRCode,
+        qr_image_path: "",
+      };
 
-    setState(prev => ({ ...prev, members: [newMember, ...prev.members] }));
-    return newMember;
-  }, []);
+      setState((prev) => ({
+        ...prev,
+        members: [newMember, ...prev.members],
+      }));
+
+      return newMember;
+    },
+    []
+  );
 
   const updateMember = useCallback(async (id: number, updates: Partial<Member>) => {
     await database.updateMemberById(id, updates);
-    setState(prev => ({
+    setState((prev) => ({
       ...prev,
-      members: prev.members.map(m => m.id === id ? { ...m, ...updates } : m),
+      members: prev.members.map((m) =>
+        m.id === id ? { ...m, ...updates } : m
+      ),
     }));
   }, []);
 
   const deleteMember = useCallback(async (id: number) => {
     await database.deleteMemberById(id);
-    setState(prev => ({
+    setState((prev) => ({
       ...prev,
-      members: prev.members.filter(m => m.id !== id),
+      members: prev.members.filter((m) => m.id !== id),
     }));
   }, []);
 
-  const getMember = useCallback((id: number): Member | undefined => {
-    return state.members.find(m => m.id === id);
-  }, [state.members]);
+  const getMember = useCallback(
+    (id: number): Member | undefined => state.members.find((m) => m.id === id),
+    [state.members]
+  );
 
-  const getMemberByQR = useCallback((qrCode: string): Member | undefined => {
-    return state.members.find(m => m.qr_code === qrCode);
-  }, [state.members]);
+  const getMemberByQR = useCallback(
+    (qrCode: string) => state.members.find((m) => m.qr_code === qrCode),
+    [state.members]
+  );
 
   const addAttendance = useCallback(async (memberId: number) => {
     const now = new Date();
     const attendanceData = {
       member_id: memberId,
-      date: now.toISOString().split('T')[0],
-      time: now.toTimeString().split(' ')[0],
+      date: now.toISOString().split("T")[0],
+      time: now.toTimeString().split(" ")[0],
     };
-    
+
     const id = await database.insertAttendance(attendanceData);
-    
-    const attendance: Attendance = {
-      id,
-      ...attendanceData,
-    };
-    setState(prev => ({ ...prev, attendance: [attendance, ...prev.attendance] }));
+
+    setState((prev) => ({
+      ...prev,
+      attendance: [{ id, ...attendanceData }, ...prev.attendance],
+    }));
   }, []);
 
   const addSale = useCallback(async (type: string, amount: number, note: string) => {
     const saleData = {
       type,
       amount,
-      date: new Date().toISOString().split('T')[0],
+      date: new Date().toISOString().split("T")[0],
       note,
     };
-    
+
     const id = await database.insertSale(saleData);
-    
-    const sale: Sale = {
-      id,
-      ...saleData,
-    };
-    setState(prev => ({ ...prev, sales: [sale, ...prev.sales] }));
+
+    setState((prev) => ({
+      ...prev,
+      sales: [{ id, ...saleData }, ...prev.sales],
+    }));
   }, []);
 
   const updatePriceSettings = useCallback(async (settings: Partial<PriceSettings>) => {
     await database.updatePriceSettingsDB(settings);
-    setState(prev => ({
+    setState((prev) => ({
       ...prev,
       priceSettings: { ...prev.priceSettings, ...settings },
     }));
   }, []);
 
-  const getTodayAttendance = useCallback((): Attendance[] => {
-    const today = new Date().toISOString().split('T')[0];
-    return state.attendance.filter(a => a.date === today);
+  const getTodayAttendance = useCallback(() => {
+    const today = new Date().toISOString().split("T")[0];
+    return state.attendance.filter((a) => a.date === today);
   }, [state.attendance]);
 
-  const getTodaySales = useCallback((): number => {
-    const today = new Date().toISOString().split('T')[0];
+  const getTodaySales = useCallback(() => {
+    const today = new Date().toISOString().split("T")[0];
     return state.sales
-      .filter(s => s.date === today)
+      .filter((s) => s.date === today)
       .reduce((sum, s) => sum + s.amount, 0);
   }, [state.sales]);
 
-  const getActiveMembers = useCallback((): Member[] => {
-    const today = new Date().toISOString().split('T')[0];
-    return state.members.filter(m => 
-      m.subscription_end && m.subscription_end >= today
+  const getActiveMembers = useCallback(() => {
+    const today = new Date().toISOString().split("T")[0];
+    return state.members.filter(
+      (m) => m.subscription_end && m.subscription_end >= today
     );
   }, [state.members]);
 
-  const getExpiredMembers = useCallback((): Member[] => {
-    const today = new Date().toISOString().split('T')[0];
-    return state.members.filter(m => 
-      !m.subscription_end || m.subscription_end < today
+  const getExpiredMembers = useCallback(() => {
+    const today = new Date().toISOString().split("T")[0];
+    return state.members.filter(
+      (m) => !m.subscription_end || m.subscription_end < today
     );
   }, [state.members]);
 
-  const renewSubscription = useCallback(async (memberId: number) => {
-    const member = state.members.find(m => m.id === memberId);
-    if (!member) return;
+  const renewSubscription = useCallback(
+    async (memberId: number) => {
+      const member = state.members.find((m) => m.id === memberId);
+      if (!member) return;
 
-    const today = new Date();
-    const endDate = new Date(today);
-    endDate.setMonth(endDate.getMonth() + 1);
+      const today = new Date();
+      const endDate = new Date(today);
+      endDate.setMonth(endDate.getMonth() + 1);
 
-    const priceKey = `${member.membership_type}_monthly` as keyof PriceSettings;
-    const amount = state.priceSettings[priceKey] as number;
+      const priceKey =
+        `${member.membership_type}_monthly` as keyof PriceSettings;
+      const amount = state.priceSettings[priceKey];
 
-    await updateMember(memberId, {
-      subscription_start: today.toISOString().split('T')[0],
-      subscription_end: endDate.toISOString().split('T')[0],
-    });
+      await updateMember(memberId, {
+        subscription_start: today.toISOString().split("T")[0],
+        subscription_end: endDate.toISOString().split("T")[0],
+      });
 
-    await addSale(`monthly_${member.membership_type}`, amount, `Monthly subscription for ${member.firstname} ${member.lastname}`);
-  }, [state.members, state.priceSettings, updateMember, addSale]);
+      await addSale(
+        `monthly_${member.membership_type}`,
+        amount,
+        `Monthly subscription for ${member.firstname} ${member.lastname}`
+      );
+    },
+    [state.members, state.priceSettings, updateMember, addSale]
+  );
 
-  const paySession = useCallback(async (memberId: number, isMember: boolean) => {
-    const member = state.members.find(m => m.id === memberId);
-    const amount = isMember ? state.priceSettings.session_member : state.priceSettings.session_nonmember;
-    const type = isMember ? 'session_member' : 'session_nonmember';
-    const note = member 
-      ? `Session for ${member.firstname} ${member.lastname}`
-      : 'Walk-in session';
-    
-    await addSale(type, amount, note);
-    if (memberId > 0) {
-      await addAttendance(memberId);
-    }
-  }, [state.members, state.priceSettings, addSale, addAttendance]);
+  const paySession = useCallback(
+    async (memberId: number, isMember: boolean) => {
+      const member = state.members.find((m) => m.id === memberId);
+
+      const amount = isMember
+        ? state.priceSettings.session_member
+        : state.priceSettings.session_nonmember;
+
+      const type = isMember ? "session_member" : "session_nonmember";
+
+      const note = member
+        ? `Session for ${member.firstname} ${member.lastname}`
+        : "Walk-in session";
+
+      await addSale(type, amount, note);
+
+      if (memberId > 0) {
+        await addAttendance(memberId);
+      }
+    },
+    [state.members, state.priceSettings, addSale, addAttendance]
+  );
 
   return (
     <AppContext.Provider
@@ -369,6 +401,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setHasPin,
         toggleTheme,
         setDarkMode,
+        timeoutDisabled: state.timeoutDisabled,
+        setTimeoutDisabled, // NEW EXPORT
         addMember,
         updateMember,
         deleteMember,
@@ -394,7 +428,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 export function useApp() {
   const context = useContext(AppContext);
   if (!context) {
-    throw new Error('useApp must be used within an AppProvider');
+    throw new Error("useApp must be used within an AppProvider");
   }
   return context;
 }

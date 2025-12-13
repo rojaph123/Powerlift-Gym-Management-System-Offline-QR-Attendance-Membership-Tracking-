@@ -43,6 +43,12 @@
     ],
     "experiments": {
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "5ae5f917-fa31-48ba-a54b-e365b41e5ef5"
+      }
+    },
+    "owner": "rov_japheth"
   }
 }

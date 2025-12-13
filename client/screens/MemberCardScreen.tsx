@@ -82,7 +82,8 @@ export default function MemberCardScreen() {
       if (!mediaPermission?.granted) {
         const permission = await requestMediaPermission();
         if (!permission.granted) {
-          if (permission.status === "denied" && !permission.canAskAgain && Platform.OS !== "web") {
+          if (permission.status === "denied" && !permission.canAskAgain && Platform.OS !== ("web" as any)) {
+ 
             Alert.alert(
               "Permission Required",
               "Media library permission is required to save images. Please enable it in your device settings.",
@@ -138,11 +139,8 @@ export default function MemberCardScreen() {
       
       if (viewShotRef.current?.capture) {
         if (Platform.OS !== "web") {
-          const base64 = await viewShotRef.current.capture({
-            format: "png",
-            quality: 1,
-            result: "base64",
-          });
+         const base64 = await viewShotRef.current.capture();
+
           imageBase64 = `data:image/png;base64,${base64}`;
         } else {
           const uri = await viewShotRef.current.capture();

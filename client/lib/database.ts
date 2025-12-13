@@ -171,7 +171,9 @@ export async function getAllMembers(): Promise<DBMember[]> {
   if (!database) {
     return [...inMemoryDB.members].sort((a, b) => b.id - a.id);
   }
-  return database.getAllAsync<DBMember>('SELECT * FROM members ORDER BY id DESC');
+  const rows = await database.getAllAsync('SELECT * FROM members ORDER BY id DESC');
+return rows as DBMember[];
+
 }
 
 export async function getMemberById(id: number): Promise<DBMember | null> {
@@ -179,7 +181,9 @@ export async function getMemberById(id: number): Promise<DBMember | null> {
   if (!database) {
     return inMemoryDB.members.find(m => m.id === id) || null;
   }
-  return database.getFirstAsync<DBMember>('SELECT * FROM members WHERE id = ?', [id]);
+  const row = await database.getFirstAsync('SELECT * FROM members WHERE id = ?', [id]);
+return row as DBMember | null;
+
 }
 
 export async function getMemberByQRCode(qrCode: string): Promise<DBMember | null> {
@@ -187,7 +191,9 @@ export async function getMemberByQRCode(qrCode: string): Promise<DBMember | null
   if (!database) {
     return inMemoryDB.members.find(m => m.qr_code === qrCode) || null;
   }
-  return database.getFirstAsync<DBMember>('SELECT * FROM members WHERE qr_code = ?', [qrCode]);
+  const row = await database.getFirstAsync('SELECT * FROM members WHERE qr_code = ?', [qrCode]);
+return row as DBMember | null;
+
 }
 
 export async function insertMember(member: Omit<DBMember, 'id'>): Promise<number> {
@@ -257,7 +263,9 @@ export async function getAllAttendance(): Promise<DBAttendance[]> {
   if (!database) {
     return [...inMemoryDB.attendance].sort((a, b) => b.id - a.id);
   }
-  return database.getAllAsync<DBAttendance>('SELECT * FROM attendance ORDER BY id DESC');
+  const rows = await database.getAllAsync('SELECT * FROM attendance ORDER BY id DESC');
+return rows as DBAttendance[];
+
 }
 
 export async function insertAttendance(attendance: Omit<DBAttendance, 'id'>): Promise<number> {
@@ -280,7 +288,9 @@ export async function getAllSales(): Promise<DBSale[]> {
   if (!database) {
     return [...inMemoryDB.sales].sort((a, b) => b.id - a.id);
   }
-  return database.getAllAsync<DBSale>('SELECT * FROM sales ORDER BY id DESC');
+  const rows = await database.getAllAsync('SELECT * FROM sales ORDER BY id DESC');
+return rows as DBSale[];
+
 }
 
 export async function insertSale(sale: Omit<DBSale, 'id'>): Promise<number> {
@@ -304,7 +314,9 @@ export async function getPriceSettings(): Promise<DBPriceSettings> {
     return inMemoryDB.priceSettings;
   }
   
-  const settings = await database.getFirstAsync<DBPriceSettings>('SELECT * FROM price_settings WHERE id = 1');
+  const row = await database.getFirstAsync('SELECT * FROM price_settings WHERE id = 1');
+const settings = row as DBPriceSettings | null;
+
   return settings || {
     id: 1,
     membership: 1500,
@@ -338,7 +350,9 @@ export async function getAppSettings(): Promise<DBAppSettings> {
     return inMemoryDB.appSettings;
   }
   
-  const settings = await database.getFirstAsync<DBAppSettings>('SELECT * FROM app_settings WHERE id = 1');
+ const row = await database.getFirstAsync('SELECT * FROM app_settings WHERE id = 1');
+const settings = row as DBAppSettings | null;
+
   return settings || { id: 1, pin_hash: null, is_dark_mode: 1 };
 }
 

@@ -72,7 +72,8 @@ export default function RegisterScreen() {
     setRegistrationOption("member_only");
   };
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
+
     if (!firstName.trim() || !lastName.trim() || !age || !gender) {
       Alert.alert("Missing Information", "Please fill in all required fields.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -90,19 +91,20 @@ export default function RegisterScreen() {
       subscriptionEnd = endDate.toISOString().split("T")[0];
     }
 
-    const newMember = addMember({
-      firstname: firstName.trim(),
-      lastname: lastName.trim(),
-      age: parseInt(age),
-      gender,
-      email: email.trim(),
-      phone: phone.trim(),
-      photo,
-      membership_type: membershipType,
-      is_member: 1,
-      subscription_start: subscriptionStart,
-      subscription_end: subscriptionEnd,
-    });
+    const newMember = await addMember({
+  firstname: firstName.trim(),
+  lastname: lastName.trim(),
+  age: parseInt(age),
+  gender,
+  email: email.trim(),
+  phone: phone.trim(),
+  photo,
+  membership_type: membershipType,
+  is_member: 1,
+  subscription_start: subscriptionStart,
+  subscription_end: subscriptionEnd,
+});
+
 
     addSale("membership_fee", priceSettings.membership, `Membership for ${firstName} ${lastName}`);
 
@@ -111,7 +113,7 @@ export default function RegisterScreen() {
       addSale(`monthly_${membershipType}`, priceSettings[priceKey] as number, `Monthly subscription for ${firstName} ${lastName}`);
     } else if (registrationOption === "member_session") {
       addSale("session_member", priceSettings.session_member, `Session for ${firstName} ${lastName}`);
-      addAttendance(newMember.id);
+  await addAttendance(newMember.id);
     }
 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
