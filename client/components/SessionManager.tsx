@@ -10,7 +10,7 @@ const IDLE_TIME = 2 * 60 * 1000; // 2 minutes
 const COUNTDOWN_SECONDS = 10;
 
 export default function SessionManager({ children }: { children: ReactNode }) {
-  const { isAuthenticated, setAuthenticated, timeoutDisabled } = useApp();
+  const { isAuthenticated, setAuthenticated, timeoutDisabled, isPhotoOperationInProgress } = useApp();
   const navigation = useNavigation();
 
   const idleTimer = useRef<NodeJS.Timeout | null>(null);
@@ -89,7 +89,14 @@ export default function SessionManager({ children }: { children: ReactNode }) {
         if (countdownTimer.current) clearInterval(countdownTimer.current);
         setShowModal(false);
       } else if (state === "active") {
-        // App is coming back to foreground - require re-authentication
+        // App is coming back to foreground
+        // Skip logout if photo operation is in progress
+        if (isPhotoOperationInProgress) {
+          console.log('[SessionManager] Photo operation in progress - skipping PIN screen');
+          return;
+        }
+        
+        // Otherwise require re-authentication
         console.log('[SessionManager] App returned from background - forcing PIN screen');
         safeLogout();
       }
@@ -99,7 +106,7 @@ export default function SessionManager({ children }: { children: ReactNode }) {
     return () => {
       subscription.remove();
     };
-  }, [isAuthenticated, safeLogout]);
+  }, [isAuthenticated, safeLogout, isPhotoOperationInProgress]);
 
   /** Start timer when logged in */
   useEffect(() => {

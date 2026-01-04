@@ -151,8 +151,8 @@ export default function MemberDetailScreen() {
   };
 
   const pickImage = async () => {
-    // Disable timeout during image picker
-    setTimeoutDisabled(true);
+    // Mark photo operation in progress
+    setIsPhotoOperationInProgress(true);
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -161,8 +161,8 @@ export default function MemberDetailScreen() {
       quality: 0.8,
     });
 
-    // Re-enable timeout after picker closes
-    setTimeoutDisabled(false);
+    // Mark photo operation complete
+    setIsPhotoOperationInProgress(false);
 
     if (!result.canceled && result.assets && result.assets[0]) {
       const uri = result.assets[0].uri;
@@ -183,8 +183,8 @@ export default function MemberDetailScreen() {
       return;
     }
 
-    // Disable timeout during camera capture
-    setTimeoutDisabled(true);
+    // Mark photo operation in progress
+    setIsPhotoOperationInProgress(true);
 
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
@@ -192,8 +192,8 @@ export default function MemberDetailScreen() {
       quality: 0.8,
     });
 
-    // Re-enable timeout after camera closes
-    setTimeoutDisabled(false);
+    // Mark photo operation complete
+    setIsPhotoOperationInProgress(false);
 
     if (!result.canceled && result.assets && result.assets[0]) {
       const uri = result.assets[0].uri;

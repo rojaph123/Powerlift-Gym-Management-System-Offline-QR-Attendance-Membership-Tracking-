@@ -17,7 +17,7 @@ type RegistrationOption = "member_only" | "member_monthly" | "member_session";
 export default function RegisterScreen() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const { addMember, addSale, priceSettings, addAttendance, setTimeoutDisabled } = useApp();
+  const { addMember, addSale, priceSettings, addAttendance, setIsPhotoOperationInProgress } = useApp();
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -30,8 +30,8 @@ export default function RegisterScreen() {
   const [registrationOption, setRegistrationOption] = useState<RegistrationOption>("member_only");
 
   const pickImage = async () => {
-    // Disable timeout during image picker
-    setTimeoutDisabled(true);
+    // Mark photo operation in progress
+    setIsPhotoOperationInProgress(true);
     
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
@@ -40,8 +40,8 @@ export default function RegisterScreen() {
       quality: 0.8,
     });
 
-    // Re-enable timeout after picker closes
-    setTimeoutDisabled(false);
+    // Mark photo operation complete
+    setIsPhotoOperationInProgress(false);
 
     if (!result.canceled && result.assets[0]) {
       setPhoto(result.assets[0].uri);
@@ -55,8 +55,8 @@ export default function RegisterScreen() {
       return;
     }
 
-    // Disable timeout during camera capture
-    setTimeoutDisabled(true);
+    // Mark photo operation in progress
+    setIsPhotoOperationInProgress(true);
 
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
@@ -64,8 +64,8 @@ export default function RegisterScreen() {
       quality: 0.8,
     });
 
-    // Re-enable timeout after camera closes
-    setTimeoutDisabled(false);
+    // Mark photo operation complete
+    setIsPhotoOperationInProgress(false);
 
     if (!result.canceled && result.assets[0]) {
       setPhoto(result.assets[0].uri);
