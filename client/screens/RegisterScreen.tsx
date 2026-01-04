@@ -23,8 +23,15 @@ export default function RegisterScreen() {
   // Mark this screen as a photo operation screen when mounted
   useEffect(() => {
     setIsPhotoOperationScreen(true);
+    console.log('[RegisterScreen] Set photo operation screen: true');
+    
+    let timer: NodeJS.Timeout;
     return () => {
-      setIsPhotoOperationScreen(false);
+      // Delay reset to ensure flag persists through background→active transitions
+      timer = setTimeout(() => {
+        setIsPhotoOperationScreen(false);
+        console.log('[RegisterScreen] Reset photo operation screen: false');
+      }, 500);
     };
   }, []);
 

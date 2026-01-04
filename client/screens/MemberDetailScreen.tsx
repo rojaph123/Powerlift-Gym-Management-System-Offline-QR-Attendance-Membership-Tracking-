@@ -39,8 +39,15 @@ export default function MemberDetailScreen() {
   // Mark this screen as a photo operation screen
   useEffect(() => {
     setIsPhotoOperationScreen(true);
+    console.log('[MemberDetailScreen] Set photo operation screen: true');
+    
+    let timer: NodeJS.Timeout;
     return () => {
-      setIsPhotoOperationScreen(false);
+      // Delay reset to ensure flag persists through background→active transitions
+      timer = setTimeout(() => {
+        setIsPhotoOperationScreen(false);
+        console.log('[MemberDetailScreen] Reset photo operation screen: false');
+      }, 500);
     };
   }, []);
 
