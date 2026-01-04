@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
+import { setPhotoOperationInProgress } from "@/components/SessionManager";
 
 import { useTheme } from "@/hooks/useTheme";
 import { useApp } from "@/context/AppContext";
@@ -17,7 +18,7 @@ type RegistrationOption = "member_only" | "member_monthly" | "member_session";
 export default function RegisterScreen() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const { addMember, addSale, priceSettings, addAttendance, setIsPhotoOperationInProgress } = useApp();
+  const { addMember, addSale, priceSettings, addAttendance } = useApp();
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -31,7 +32,7 @@ export default function RegisterScreen() {
 
   const pickImage = async () => {
     // Mark photo operation in progress
-    setIsPhotoOperationInProgress(true);
+    setPhotoOperationInProgress(true);
     
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
@@ -40,8 +41,8 @@ export default function RegisterScreen() {
       quality: 0.8,
     });
 
-    // Mark photo operation complete
-    setIsPhotoOperationInProgress(false);
+    // Will be reset by SessionManager when app comes back to foreground
+    // Do NOT reset here to avoid race condition
 
     if (!result.canceled && result.assets[0]) {
       setPhoto(result.assets[0].uri);
@@ -56,7 +57,7 @@ export default function RegisterScreen() {
     }
 
     // Mark photo operation in progress
-    setIsPhotoOperationInProgress(true);
+    setPhotoOperationInProgress(true);
 
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
@@ -64,8 +65,8 @@ export default function RegisterScreen() {
       quality: 0.8,
     });
 
-    // Mark photo operation complete
-    setIsPhotoOperationInProgress(false);
+    // Will be reset by SessionManager when app comes back to foreground
+    // Do NOT reset here to avoid race condition
 
     if (!result.canceled && result.assets[0]) {
       setPhoto(result.assets[0].uri);

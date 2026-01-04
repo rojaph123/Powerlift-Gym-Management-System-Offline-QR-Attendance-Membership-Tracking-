@@ -65,7 +65,6 @@ interface AppState {
   isLoading: boolean;
   timeoutDisabled: boolean; // NEW
   appWentToBackground: boolean;
-  isPhotoOperationInProgress: boolean; // NEW - prevent PIN on camera/gallery operations
 }
 
 interface AppContextType extends AppState {
@@ -74,7 +73,6 @@ interface AppContextType extends AppState {
   toggleTheme: () => void;
   setDarkMode: (value: boolean) => void;
   setTimeoutDisabled: (value: boolean) => void; // NEW
-  setIsPhotoOperationInProgress: (value: boolean) => void; // NEW
   setAppWentToBackground: (value: boolean) => void;
   addMember: (
     member: Omit<Member, "id" | "qr_code" | "qr_image_path">
@@ -141,7 +139,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     isLoading: true,
     timeoutDisabled: false, // NEW DEFAULT
     appWentToBackground: false,
-    isPhotoOperationInProgress: false, // NEW DEFAULT
   });
 
   const loadDataFromDatabase = useCallback(async () => {
@@ -566,7 +563,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setDarkMode,
         timeoutDisabled: state.timeoutDisabled,
         setTimeoutDisabled, // NEW EXPORT
-        setIsPhotoOperationInProgress: (value: boolean) => setState(prev => ({ ...prev, isPhotoOperationInProgress: value })), // NEW
         setAppWentToBackground: (value: boolean) => setState(prev => ({ ...prev, appWentToBackground: value })),
         addMember,
         updateMember,

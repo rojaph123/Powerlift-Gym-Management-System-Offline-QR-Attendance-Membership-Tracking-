@@ -7,6 +7,7 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { useHeaderHeight } from "@react-navigation/elements";
+import { setPhotoOperationInProgress } from "@/components/SessionManager";
 
 import { useTheme } from "@/hooks/useTheme";
 import { useApp, Member } from "@/context/AppContext";
@@ -25,7 +26,7 @@ export default function MemberDetailScreen() {
   const navigation = useNavigation<NavigationProp>();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
-  const { getMember, renewSubscription, paySession, attendance, priceSettings, deleteMember, updateMember, setTimeoutDisabled } = useApp();
+  const { getMember, renewSubscription, paySession, attendance, priceSettings, deleteMember, updateMember } = useApp();
 
   const member = getMember(route.params.memberId);
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -152,7 +153,7 @@ export default function MemberDetailScreen() {
 
   const pickImage = async () => {
     // Mark photo operation in progress
-    setIsPhotoOperationInProgress(true);
+    setPhotoOperationInProgress(true);
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -161,8 +162,8 @@ export default function MemberDetailScreen() {
       quality: 0.8,
     });
 
-    // Mark photo operation complete
-    setIsPhotoOperationInProgress(false);
+    // Will be reset by SessionManager when app comes back to foreground
+    // Do NOT reset here to avoid race condition
 
     if (!result.canceled && result.assets && result.assets[0]) {
       const uri = result.assets[0].uri;
@@ -184,7 +185,7 @@ export default function MemberDetailScreen() {
     }
 
     // Mark photo operation in progress
-    setIsPhotoOperationInProgress(true);
+    setPhotoOperationInProgress(true);
 
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
@@ -192,8 +193,8 @@ export default function MemberDetailScreen() {
       quality: 0.8,
     });
 
-    // Mark photo operation complete
-    setIsPhotoOperationInProgress(false);
+    // Will be reset by SessionManager when app comes back to foreground
+    // Do NOT reset here to avoid race condition
 
     if (!result.canceled && result.assets && result.assets[0]) {
       const uri = result.assets[0].uri;
