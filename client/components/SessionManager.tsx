@@ -9,13 +9,13 @@ import { useApp } from "@/context/AppContext";
 const IDLE_TIME = 2 * 60 * 1000; // 2 minutes
 const COUNTDOWN_SECONDS = 10;
 
-// Global ref to track if photo operation is in progress
-// Using a ref instead of state to avoid race conditions
-const photoOperationRef = { current: false };
+// Global ref to track if user is on a screen that allows photo operations
+// If true, skip PIN requirement on background transitions
+const isPhotoOperationScreenRef = { current: false };
 
-export function setPhotoOperationInProgress(value: boolean) {
-  photoOperationRef.current = value;
-  console.log('[SessionManager] Photo operation flag:', value);
+export function setIsPhotoOperationScreen(value: boolean) {
+  isPhotoOperationScreenRef.current = value;
+  console.log('[SessionManager] Is photo operation screen:', value);
 }
 
 export default function SessionManager({ children }: { children: ReactNode }) {
@@ -91,7 +91,7 @@ export default function SessionManager({ children }: { children: ReactNode }) {
 
     const subscription = AppState.addEventListener("change", (state) => {
       console.log('[SessionManager] AppState changed:', state);
-      console.log('[SessionManager] Photo operation in progress:', photoOperationRef.current);
+      console.log('[SessionManager] Is photo operation screen:', isPhotoOperationScreenRef.current);
       
       if (state === "background") {
         // App is going to background - stop the idle timer
@@ -100,11 +100,9 @@ export default function SessionManager({ children }: { children: ReactNode }) {
         setShowModal(false);
       } else if (state === "active") {
         // App is coming back to foreground
-        // Check if photo operation is in progress using ref
-        if (photoOperationRef.current) {
-          console.log('[SessionManager] Photo operation in progress - skipping PIN screen');
-          // Reset the flag for next time
-          photoOperationRef.current = false;
+        // Skip logout if user is on a photo operation screen (Register or MemberDetail)
+        if (isPhotoOperationScreenRef.current) {
+          console.log('[SessionManager] User is on photo operation screen - skipping PIN screen');
           return;
         }
         

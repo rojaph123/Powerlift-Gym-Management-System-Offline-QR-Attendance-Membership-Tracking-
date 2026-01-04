@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { View, StyleSheet, ScrollView, Pressable, Image, Alert, TextInput, Modal, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRoute, useNavigation, RouteProp } from "@react-navigation/native";
@@ -7,7 +7,7 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { useHeaderHeight } from "@react-navigation/elements";
-import { setPhotoOperationInProgress } from "@/components/SessionManager";
+import { setIsPhotoOperationScreen } from "@/components/SessionManager";
 
 import { useTheme } from "@/hooks/useTheme";
 import { useApp, Member } from "@/context/AppContext";
@@ -35,6 +35,14 @@ export default function MemberDetailScreen() {
   const [editMembershipType, setEditMembershipType] = useState<Member["membership_type"]>("regular");
   const [showDateModal, setShowDateModal] = useState(false);
   const [editingField, setEditingField] = useState<"start" | "end">("end");
+
+  // Mark this screen as a photo operation screen
+  useEffect(() => {
+    setIsPhotoOperationScreen(true);
+    return () => {
+      setIsPhotoOperationScreen(false);
+    };
+  }, []);
 
   const isActive = useMemo(() => {
     if (!member?.subscription_end) return false;
@@ -152,18 +160,12 @@ export default function MemberDetailScreen() {
   };
 
   const pickImage = async () => {
-    // Mark photo operation in progress
-    setPhotoOperationInProgress(true);
-
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
     });
-
-    // Will be reset by SessionManager when app comes back to foreground
-    // Do NOT reset here to avoid race condition
 
     if (!result.canceled && result.assets && result.assets[0]) {
       const uri = result.assets[0].uri;
@@ -184,17 +186,11 @@ export default function MemberDetailScreen() {
       return;
     }
 
-    // Mark photo operation in progress
-    setPhotoOperationInProgress(true);
-
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
     });
-
-    // Will be reset by SessionManager when app comes back to foreground
-    // Do NOT reset here to avoid race condition
 
     if (!result.canceled && result.assets && result.assets[0]) {
       const uri = result.assets[0].uri;

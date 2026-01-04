@@ -1,10 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { View, StyleSheet, TextInput, Pressable, Image, Alert, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
-import { setPhotoOperationInProgress } from "@/components/SessionManager";
+import { setIsPhotoOperationScreen } from "@/components/SessionManager";
 
 import { useTheme } from "@/hooks/useTheme";
 import { useApp } from "@/context/AppContext";
@@ -20,6 +20,14 @@ export default function RegisterScreen() {
   const insets = useSafeAreaInsets();
   const { addMember, addSale, priceSettings, addAttendance } = useApp();
 
+  // Mark this screen as a photo operation screen when mounted
+  useEffect(() => {
+    setIsPhotoOperationScreen(true);
+    return () => {
+      setIsPhotoOperationScreen(false);
+    };
+  }, []);
+
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [age, setAge] = useState("");
@@ -31,18 +39,12 @@ export default function RegisterScreen() {
   const [registrationOption, setRegistrationOption] = useState<RegistrationOption>("member_only");
 
   const pickImage = async () => {
-    // Mark photo operation in progress
-    setPhotoOperationInProgress(true);
-    
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
     });
-
-    // Will be reset by SessionManager when app comes back to foreground
-    // Do NOT reset here to avoid race condition
 
     if (!result.canceled && result.assets[0]) {
       setPhoto(result.assets[0].uri);
@@ -56,17 +58,11 @@ export default function RegisterScreen() {
       return;
     }
 
-    // Mark photo operation in progress
-    setPhotoOperationInProgress(true);
-
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
     });
-
-    // Will be reset by SessionManager when app comes back to foreground
-    // Do NOT reset here to avoid race condition
 
     if (!result.canceled && result.assets[0]) {
       setPhoto(result.assets[0].uri);
